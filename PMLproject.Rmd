@@ -1,0 +1,93 @@
+---
+title: "Practical Machine Learning project for Coursera course"
+author: "Jens"
+date: "Sunday, March 22, 2015"
+output: html_document
+---
+```{r, echo=FALSE}
+# Loading packages
+library(caret)
+```
+
+
+## Synopsis
+
+In this project the weightlift data set from [1] is used to predict Which excersise the participants did. How the training set is constructed and how the random forest model is trained is described.
+
+
+
+## Data Processing
+
+The data file was downloaded from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv and loaded into R with the following command:
+```{r, cache = TRUE}
+trainData <- read.csv("pml-training.csv")
+```
+
+As there are
+```{r, echo=FALSE}
+length(names(trainData))
+```
+varibles on the original data set, we will try and reduce this by a proper pre-processing/clearning of the data set. First we take away the near zero values:
+```{r}
+nsv <- nearZeroVar(trainData, saveMetrics=TRUE)
+trainData <- trainData[!nsv$nzv]
+```
+This us down to
+```{r}
+length(names(trainData))
+```
+variabels. We now remove variables where most values are NA:
+```{r}
+nottoNA <- colSums(is.na(trainData))<0.8*nrow(trainData)
+trainData <- trainData[nottoNA]
+```
+This leave us with
+```{r}
+length(names(trainData))
+```
+variables. (Some of these variables are highly correlated, but due to time constraint I have not looked into removing such variables. Instead PCA pre-processing will be used diretly in the training of the model.)
+
+We split the training set into a training and a test set:
+```{r}
+inTrain <- createDataPartition(y=trainData$classe, p=0.60, list=FALSE)
+train <- trainData[inTrain, ]
+test <- trainData[-inTrain, ]
+```
+With the this, we will be able to evaluate the out of sample error on this test set.
+
+We now train a random forest model where we use 3-fold cross validation. As cross validation is used directly in the model, we did not split original training set into both a training set, a cross validation set, and a test set, but only a training set and a test set.
+```{r}
+modelFit <- train(classe ~ ., method='rf', data=train, preProcess='pca', 
+                  trControl = trainControl(method = "repeatedcv", number=3, repeats=3),
+                  ntree=100)
+```
+
+## Results
+
+With the trained model, we estimate the out of simple error using our created test set:
+```{r}
+confusionMatrix(test$classe, predict(modelFit, test))
+```
+As can be seen the out of sampling error is fairly low (i.e. the accuracy is high).
+
+Using the trained model, we can now finally predict the class of the 20 test cases provided for the project:
+```{r}
+finaltest <- read.csv("pml-testing.csv")
+finaltest <- finaltest[!nsv$nzv]
+finaltest <- finaltest[nottoNA]
+predictions <- predict(modelFit, finaltest)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictions)
+```
+While the out of sample error seems low, the model only predicted 18 out 20 cases correct, so there is still room for improvement. However, this will be left for future studies.
+
+## References
+
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
